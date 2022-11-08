@@ -4,9 +4,16 @@
 
 # COMMAND ----------
 
+dbutils.widgets.text("p_Filedate","2021-03-21")
+V_Filedate = dbutils.widgets.get("p_Filedate")
+
+dbutils.widgets.text("P_source","Manual")
+V_Source = dbutils.widgets.get("P_source")
+
+# COMMAND ----------
+
 # DBTITLE 1,Import Functions 
-from pyspark.sql.types import IntegerType,StringType,StructType,StructField,FloatType
-from pyspark.sql.functions import *
+# MAGIC %run /Users/Saravana_admin@5njbxz.onmicrosoft.com/Include/Config_File
 
 # COMMAND ----------
 
@@ -33,12 +40,8 @@ Results_schema = StructType (fields = [StructField("resultId",IntegerType(),True
 
 Results_df = spark.read\
          .schema(Results_schema)\
-         .json("/mnt/raw/results.json")
+         .json(f"/mnt/raw/{V_Filedate}/results.json")
 
-
-# COMMAND ----------
-
-display(Results_df)
 
 # COMMAND ----------
 
@@ -54,12 +57,53 @@ Results_Transform_df = Results_df.withColumnRenamed("resultId","result_Id")\
                                 .withColumnRenamed("fastestLapTime","fastest_Lap_Time")\
                                 .withColumnRenamed("fastestLapSpeed","fastest_Lap_Speed")\
                                 .withColumn("Ingestion_time",current_timestamp())\
+                                .withColumn("Field_date",lit(V_Filedate))\
+                                .withColumn("Source",lit(V_Source))\
                                 .drop(col("statusId"))
 
 
 # COMMAND ----------
 
-Results_Transform_df.write.mode("overwrite").parquet("dbfs:/mnt/processed/results")
+#Results_Transform_df.write.mode("overwrite").parquet("dbfs:/mnt/processed/results")
+
+# COMMAND ----------
+
+def merge_delta_data(input_df,db_name,table_name,filepath,Merge_condtion,Partition_column):
+    from delta.tables import DeltaTable
+    if (spark._jsparkSession.catalog().tableExists(f"{db_name}.{table_name}")):
+           TargetTbl = DeltaTable.forPath(spark, f"{filepath}/{table_name}")
+           TargetTbl.alias("tgt").merge(input_df.alias("src"),{Merge_condtion})\
+                    .whenMatchedUpdateAll()\
+                    .whenNotMatchedInsertAll()\
+                    .execute()
+    else:
+         input_df.write.mode("overwrite").partitionBy(Partition_column).format("delta").saveAsTable(f"{db_name}.{table_name}")
+
+# COMMAND ----------
+
+Merge_condition = "tgt.result_id= src.result_id AND tgt.race_id = src.race_id"
+merge_delta_data(Results_Transform_df,'f1_processed','results',processed_folder_path,Merge_condition,'race_id')
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC select race_id,count(1) from f1_processed.results
+# MAGIC Group by race_id
+# MAGIC order by race_id desc
+
+# COMMAND ----------
+
+# MAGIC %sql show databases
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC Select * from f1_processed.results
+
+# COMMAND ----------
+
+# MAGIC %sql 
+# MAGIC desc extended f1_processed.results
 
 # COMMAND ----------
 

@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC ##### Data Ingestion of Pitstops #####
+# MAGIC ##### Data Ingestion of laptimes #####
 
 # COMMAND ----------
 
@@ -16,24 +16,22 @@ V_Source = dbutils.widgets.get("P_source")
 
 # COMMAND ----------
 
-Pitstops_Schema = StructType(fields = [ StructField ("raceId",IntegerType(),False),
-                                        StructField ("driverId",StringType(),False),
-                                        StructField ("stop",IntegerType(),True),
+laptimes_Schema = StructType(fields = [ StructField ("qualifyId",IntegerType(),False),
+                                        StructField ("driverId",IntegerType(),False),
                                         StructField ("lap",IntegerType(),False),
+                                        StructField ("position",IntegerType(),False),
                                         StructField ("time",StringType(),False),
-                                        StructField ("duration",FloatType(),False),
                                         StructField ("milliseconds",IntegerType(),False)
                                     
 ])
 
-Pitstops_Df = spark.read\
-            .schema(Pitstops_Schema)\
-            .option("multiline",True)\
-            .json(f"{raw_folder_path}/{V_Filedate}/pit_stops.json")
+laptimes_Df = spark.read\
+            .schema(laptimes_Schema)\
+            .csv(f"{raw_folder_path}/{V_Filedate}/lap_times")
 
 # COMMAND ----------
 
-Pitstops_transform_df = Pitstops_Df.withColumnRenamed("raceId","race_Id")\
+Laptimes_transform_df = laptimes_Df.withColumnRenamed("raceId","race_Id")\
                                 .withColumnRenamed("driverId","driver_Id")\
                                 .withColumn("Field_date",lit(V_Filedate))\
                                 .withColumn("Source",lit(V_Source))\
@@ -41,23 +39,23 @@ Pitstops_transform_df = Pitstops_Df.withColumnRenamed("raceId","race_Id")\
 
 # COMMAND ----------
 
-#Pitstops_transform_df.write.mode("overwrite").parquet("dbfs:/mnt/processed/pit_stops")
+#Laptimes_transform_df.write.mode("overwrite").parquet("dbfs:/mnt/processed/lap_times")
 
 # COMMAND ----------
 
-Merge_condition = 'tgt.driver_Id = src.driver_Id'
-merge_delta_data(Pitstops_transform_df,'f1_processed','pitstops',processed_folder_path,Merge_condition,'race_Id')
+Merge_condition = "tgt.driver_Id= src.driver_Id"
+merge_delta_data(Laptimes_transform_df,'f1_processed','lap_times',processed_folder_path,Merge_condition,'driver_Id')
 
 # COMMAND ----------
 
 # MAGIC %sql
-# MAGIC select race_id,count(1) from f1_processed.pitstops
+# MAGIC select race_id,count(1) from f1_processed.lap_times
 # MAGIC Group by race_id
 # MAGIC order by race_id desc
 
 # COMMAND ----------
 
-display(Pitstops_transform_df)
+display (laptimes_Df)
 
 # COMMAND ----------
 
